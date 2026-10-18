@@ -1,0 +1,221 @@
+-- โหลด Rayfield Library
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+-- สร้างหน้าต่าง UI
+local Window = Rayfield:CreateWindow({
+   Name = "MM2 สคริปต์คนไทย",
+   LoadingTitle = "กำลังโหลดสคริปต์...",
+   LoadingSubtitle = "โดย AI Assistant",
+   ConfigurationSaving = {
+      Enabled = false
+   },
+   Discord = {
+      Enabled = false
+   },
+   KeySystem = false
+})
+
+-- ตัวแปรระบบ
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+local FlyEnabled = false
+local FlySpeed = 50
+local BodyVelocity, BodyGyro
+local ESPEnabled = false
+local ESPHighlights = {}
+
+-- ฟังก์ชันตรวจสอบบทบาทของผู้เล่น
+local function GetRole(player)
+    if not player or not player.Character then return "Innocent" end
+    
+    -- เช็กในกระเป๋า (Backpack) และตัวละคร
+    local backpack = player:FindFirstChild("Backpack")
+    local character = player.Character
+    
+    if (backpack and backpack:FindFirstChild("Knife")) or (character and character:FindFirstChild("Knife")) then
+        return "Murderer"
+    elseif (backpack and backpack:FindFirstChild("Gun")) or (character and character:FindFirstChild("Gun")) then
+        return "Sheriff"
+    end
+    
+    return "Innocent"
+end
+
+---------------------------------------------------------
+-- แท็บหลัก (Main Tab)
+---------------------------------------------------------
+local MainTab = Window:CreateTab("ฟังก์ชันหลัก", 4483362458)
+
+-- 1. ระบบบิน (Fly)
+MainTab:CreateToggle({
+   Name = "เปิดระบบบิน",
+   CurrentValue = false,
+   Flag = "FlyToggle",
+   Callback = function(Value)
+      FlyEnabled = Value
+      local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+      local root = char:FindFirstChild("HumanoidRootPart")
+      
+      if FlyEnabled and root then
+         BodyVelocity = Instance.new("BodyVelocity")
+         BodyGyro = Instance.new("BodyGyro")
+         
+         BodyVelocity.Velocity = Vector3.zero
+         BodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+         BodyVelocity.Parent = root
+         
+         BodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+         BodyGyro.CFrame = root.CFrame
+         BodyGyro.Parent = root
+         
+         task.spawn(function()
+            while FlyEnabled and root and root.Parent do
+               local moveDir = Vector3.zero
+               local UIS = game:GetService("UserInputService")
+               
+               if UIS:IsKeyDown(Enum.KeyCode.W) then moveDir = moveDir + Camera.CFrame.LookVector end
+               if UIS:IsKeyDown(Enum.KeyCode.S) then moveDir = moveDir - Camera.CFrame.LookVector end
+               if UIS:IsKeyDown(Enum.KeyCode.A) then moveDir = moveDir - Camera.CFrame.RightVector end
+               if UIS:IsKeyDown(Enum.KeyCode.D) then moveDir = moveDir + Camera.CFrame.RightVector end
+               if UIS:IsKeyDown(Enum.KeyCode.Space) then moveDir = moveDir + Vector3.new(0, 1, 0) end
+               if UIS:IsKeyDown(Enum.KeyCode.LeftShift) then moveDir = moveDir - Vector3.new(0, 1, 0) end
+               
+               BodyVelocity.Velocity = moveDir * FlySpeed
+               BodyGyro.CFrame = Camera.CFrame
+               RunService.RenderStepped:Wait()
+            end
+            if BodyVelocity then BodyVelocity:Destroy() end
+            if BodyGyro then BodyGyro:Destroy() end
+         end)
+      else
+         if BodyVelocity then BodyVelocity:Destroy() end
+         if BodyGyro then BodyGyro:Destroy() end
+      end
+   end,
+})
+
+MainTab:CreateSlider({
+   Name = "ความเร็วในการบิน",
+   Range = {10, 200},
+   Increment = 5,
+   Suffix = " Speed",
+   CurrentValue = 50,
+   Flag = "FlySpeedSlider",
+   Callback = function(Value)
+      FlySpeed = Value
+   end,
+})
+
+-- 2. วาร์ปไปฆ่าทุกคน (เฉพาะตอนเป็นฆาตกร)
+MainTab:CreateButton({
+   Name = "วาร์ปไปฆ่าทุกคน (เฉพาะฆาตกร)",
+   Callback = function()
+      local myRole = GetRole(LocalPlayer)
+      if myRole ~= "Murderer" then
+         Rayfield:Notify({
+            Title = "ข้อผิดพลาด",
+            Content = "คุณต้องเป็น 'ฆาตกร' เท่านั้นถึงจะใช้ฟังก์ชันนี้ได้!",
+            Duration = 3,
+            Image = 4483362458,
+         })
+         return
+      end
+      
+      local myChar = LocalPlayer.Character
+      local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+      if not myRoot then return end
+      
+      for _, target in pairs(Players:GetPlayers()) do
+         if target ~= LocalPlayer and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+            local targetHumanoid = target.Character:FindFirstChildOfClass("Humanoid")
+            if targetHumanoid and targetHumanoid.Health > 0 then
+               myRoot.CFrame = target.Character.HumanoidRootPart.CFrame * CFrame.new(0, 0, 2)
+               task.wait(0.3)
+            end
+         end
+      end
+   end,
+})
+
+-- 3. ยิงฆาตกรแบบอัตโนมัติ (เฉพาะตอนเป็นนายอำเภอ)
+MainTab:CreateButton({
+   Name = "ยิงฆาตกรอัตโนมัติ (เฉพาะนายอำเภอ)",
+   Callback = function()
+      local myRole = GetRole(LocalPlayer)
+      if myRole ~= "Sheriff" then
+         Rayfield:Notify({
+            Title = "ข้อผิดพลาด",
+            Content = "คุณต้องเป็น 'นายอำเภอ' เท่านั้นถึงจะใช้ฟังก์ชันนี้ได้!",
+            Duration = 3,
+            Image = 4483362458,
+         })
+         return
+      end
+      
+      -- ตามหาฆาตกร
+      local murderer = nil
+      for _, p in pairs(Players:GetPlayers()) do
+         if p ~= LocalPlayer and GetRole(p) == "Murderer" then
+            murderer = p
+            break
+         end
+      end
+      
+      if not murderer or not murderer.Character or not murderer.Character:FindFirstChild("HumanoidRootPart") then
+         Rayfield:Notify({
+            Title = "ไม่พบเป้าหมาย",
+            Content = "ยังไม่พบตัวฆาตกรในขณะนี้",
+            Duration = 3,
+            Image = 4483362458,
+         })
+         return
+      end
+      
+      -- ถือปืนและยิง
+      local char = LocalPlayer.Character
+      local gun = LocalPlayer.Backpack:FindFirstChild("Gun") or char:FindFirstChild("Gun")
+      
+      if gun then
+         if gun.Parent == LocalPlayer.Backpack then
+            gun.Parent = char
+         end
+         
+         task.wait(0.1)
+         local targetPos = murderer.Character.HumanoidRootPart.Position
+         
+         -- ยิงปืนไปยังตำแหน่งของฆาตกร
+         if gun:FindFirstChild("Shoot") then
+            gun.Shoot:FireServer(targetPos)
+         elseif gun:FindFirstChild("KnifeServer") then -- สคริปต์บางเวอร์ชันใช้ Remote ต่างกัน
+            gun.KnifeServer.ShootGun:FireServer(1, targetPos, "Shoot")
+         end
+         
+         Rayfield:Notify({
+            Title = "สำเร็จ",
+            Content = "ยิงไปที่ฆาตกร (" .. murderer.Name .. ") เรียบร้อยแล้ว!",
+            Duration = 3,
+            Image = 4483362458,
+         })
+      end
+   end,
+})
+
+---------------------------------------------------------
+-- แท็บมองเห็นทะลุกำแพง (ESP Tab)
+---------------------------------------------------------
+local ESPTab = Window:CreateTab("ระบบมองทะลุ (ESP)", 4483362458)
+
+-- ฟังก์ชันสร้าง ESP
+local function UpdateESP()
+   -- ลบ Highlight เก่าออก
+   for _, highlight in pairs(ESPHighlights) do
+      if highlight then highlight:Destroy() end
+   end
+   table.clear(ESPHighlights)
+   
+   if not ESPEnabled then return end
+   
+   for _, p in pairs(Players
